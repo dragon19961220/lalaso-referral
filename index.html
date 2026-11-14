@@ -87,7 +87,7 @@
       <button class="btn" id="csv">匯出 CSV</button>
       <button class="btn" id="clear">清除資料</button>
     </div>
-    <p class="muted" style="margin:10px 0 0">轉介率 = 體驗券堂數 ÷（課程券＋補課券堂數），以預約計算（不論是否到課）。週別以上課日期計算（週一至週日）。</p>
+    <p class="muted" style="margin:10px 0 0">轉介率 = 體驗券張數 ÷（課程券＋補課券張數），每筆預約計 1 張（不論是否到課）。週別以上課日期計算（週一至週日）。</p>
   </section>
 
   <section id="out" class="hidden">
@@ -101,7 +101,7 @@
     </div>
     <div class="card">
       <details>
-        <summary>各票券堂數明細（核對用）</summary>
+        <summary>各票券張數明細（核對用）</summary>
         <div class="scroll" style="margin-top:10px"><table id="tickets"></table></div>
       </details>
     </div>
@@ -199,7 +199,7 @@ function parseSheet(rows, fileName){
 function aggregate(records, cfg, opts){
   const seen = new Set();
   const weeks = {};      // week -> branch -> course -> {num,den}
-  const tickets = {};    // branch|code -> qty
+  const tickets = {};    // branch|code -> 張數
   for(const r of records){
     const k = r.id ? r.id+'|'+r.code : null;
     if(k){ if(seen.has(k)) continue; seen.add(k); }
@@ -212,8 +212,8 @@ function aggregate(records, cfg, opts){
     const w = (weeks[r.week] ||= { label:r.weekLabel, branches:{} });
     const b = (w.branches[r.branch] ||= {});
     const c = (b[course] ||= {num:0,den:0});
-    if(isNum) c.num += r.qty; else c.den += r.qty;
-    const tk = r.branch+'|'+r.code; tickets[tk] = (tickets[tk]||0) + r.qty;
+    if(isNum) c.num += 1; else c.den += 1;
+    const tk = r.branch+'|'+r.code; tickets[tk] = (tickets[tk]||0) + 1;
   }
   return { weeks, tickets };
 }
