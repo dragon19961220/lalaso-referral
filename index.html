@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>體驗轉介率計算工具｜LALASO</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --blue:#2778BE; --blue2:#409AD6; --pink:#F4ADAD; --yellow:#FCD475; --green:#A4D5BB; --orange:#F7B88E;
+    --ink:#1f2d3d; --muted:#6b7a8c; --line:#e3e9f0; --bg:#f5f8fb; --card:#fff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Avenir Next","Noto Sans TC","Noto Sans CJK TC","Microsoft JhengHei",sans-serif;color:var(--ink);background:var(--bg);line-height:1.5}
+  header{background:var(--blue);color:#fff;padding:22px 24px}
+  header h1{margin:0;font-size:22px;letter-spacing:.5px}
+  header p{margin:4px 0 0;opacity:.85;font-size:14px}
+  main{max-width:1180px;margin:0 auto;padding:20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+  h2{font-size:17px;margin:0 0 12px;color:var(--blue)}
+  #drop{border:2px dashed var(--blue2);border-radius:12px;padding:28px;text-align:center;cursor:pointer;background:#f0f7fd;transition:.15s}
+  #drop.over{background:#dcecf9}
+  #drop b{color:var(--blue)}
+  .files{margin-top:12px;display:flex;flex-wrap:wrap;gap:8px}
+  .chip{background:#eef4fa;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:13px}
+  .chip.err{background:#fdecec;border-color:#f3c2c2;color:#a33}
+  .row{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .seg{display:inline-flex;border:1px solid var(--blue);border-radius:8px;overflow:hidden}
+  .seg button{border:0;background:#fff;color:var(--blue);padding:6px 14px;cursor:pointer;font:inherit;font-size:14px}
+  .seg button.on{background:var(--blue);color:#fff}
+  .btn{border:1px solid var(--blue);background:#fff;color:var(--blue);border-radius:8px;padding:6px 14px;cursor:pointer;font:inherit;font-size:14px}
+  .btn:hover{background:#eef4fa}
+  .btn.primary{background:var(--blue);color:#fff}
+  .muted{color:var(--muted);font-size:13px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+  .kpi{border:1px solid var(--line);border-radius:12px;padding:14px;background:#fff}
+  .kpi h3{margin:0 0 8px;font-size:15px;display:flex;justify-content:space-between;align-items:baseline}
+  .kpi h3 .big{font-size:26px;color:var(--blue)}
+  .bars{display:flex;flex-direction:column;gap:6px}
+  .bar{display:grid;grid-template-columns:44px 1fr 64px;gap:8px;align-items:center;font-size:13px}
+  .track{height:14px;background:#f0f3f7;border-radius:7px;overflow:hidden}
+  .fill{height:100%;border-radius:7px}
+  .c-親子{background:var(--pink)} .c-幼兒{background:var(--yellow)} .c-兒童{background:var(--green)}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:right;white-space:nowrap}
+  th{background:#f3f7fb;color:#3a4a5c;font-weight:600;position:sticky;top:0}
+  td:first-child,th:first-child,td:nth-child(2),th:nth-child(2){text-align:left}
+  th.g-親子{background:#fde8e8} th.g-幼兒{background:#fef4d6} th.g-兒童{background:#e5f4ec} th.g-合計{background:#dfeaf6}
+  td.rate{font-weight:700;color:var(--blue)}
+  tr.total td{background:#f7fafc;font-weight:600}
+  .scroll{overflow-x:auto}
+  details summary{cursor:pointer;color:var(--blue);font-weight:600}
+  textarea{width:100%;font-family:ui-monospace,Consolas,monospace;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:8px}
+  label.f{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  .hidden{display:none}
+  .warn{background:#fff7e6;border:1px solid #f7d79a;border-radius:8px;padding:8px 12px;font-size:13px;margin-top:10px}
+  footer{text-align:center;color:var(--muted);font-size:12px;padding:20px}
+</style>
+</head>
+<body>
+<header>
+  <h1>體驗轉介率計算工具</h1>
+  <p>LALASO 拉拉手游泳學院｜依館別、課程（親子／幼兒／兒童）計算每週轉介率</p>
+</header>
+<main>
+  <section class="card">
+    <h2>① 上傳 Bookfast「團體課表預約明細簽到版」</h2>
+    <div id="drop">
+      <div><b>點此選擇檔案</b> 或把檔案拖進來</div>
+      <div class="muted">可一次放多個檔案（西屯、北屯、不同週期皆可），資料只在你的瀏覽器裡處理，不會上傳</div>
+      <input id="file" type="file" accept=".xlsx,.xls" multiple class="hidden">
+    </div>
+    <div class="files" id="files"></div>
+    <div id="warns"></div>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <div><span class="muted">館別　</span>
+        <span class="seg" id="branchSeg">
+          <button data-v="all" class="on">全部</button>
+          <button data-v="西屯">西屯</button>
+          <button data-v="北屯">北屯</button>
+        </span>
+      </div>
+      <div style="flex:1"></div>
+      <button class="btn" id="csv">匯出 CSV</button>
+      <button class="btn" id="clear">清除資料</button>
+    </div>
+    <p class="muted" style="margin:10px 0 0">轉介率 = 體驗券堂數 ÷（課程券＋補課券堂數），以預約計算（不論是否到課）。週別以上課日期計算（週一至週日）。</p>
+  </section>
+
+  <section id="out" class="hidden">
+    <div class="card">
+      <h2 id="kpiTitle">整體期間</h2>
+      <div class="kpis" id="kpis"></div>
+    </div>
+    <div class="card">
+      <h2>每週明細</h2>
+      <div class="scroll"><table id="tbl"></table></div>
+    </div>
+    <div class="card">
+      <details>
+        <summary>各票券堂數明細（核對用）</summary>
+        <div class="scroll" style="margin-top:10px"><table id="tickets"></table></div>
+      </details>
+    </div>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary>計算設定（票券代碼）</summary>
+      <label class="f">分子：體驗券代碼（以逗號分隔）</label>
+      <textarea id="numCodes" rows="1"></textarea>
+      <label class="f">分母：課程券＋補課券代碼（以逗號分隔）</label>
+      <textarea id="denCodes" rows="3"></textarea>
+      <label class="f">票券對應課程（每行：代碼,券別,課程）— 課程需包含「親子」「幼兒」或「兒童」</label>
+      <textarea id="mapText" rows="8"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn primary" id="saveCfg">套用</button>
+        <button class="btn" id="resetCfg">恢復預設</button>
+        <span class="muted" id="cfgMsg"></span>
+      </div>
+    </details>
+  </section>
+</main>
+<footer>LALASO SWIM ACADEMY · Inspire Our Kids, Inspire Our World.</footer>
+
+<script>
+// ===== CORE START =====
+const COURSES = ['親子','幼兒','兒童'];
+const DEFAULT_NUM = ['N48','N55','N56'];
+const DEFAULT_DEN = ['N02','N03','N05','N06','N09','N10','N12','N13','N14','N23','N24','N25',
+  'N71','N72','N73','N74','N75','N76','N77','N78','N79','N80','N81','N82'];
+const DEFAULT_MAP = [
+  ['N02','課程券','Ａ親子'],['N03','課程券','Ｂ親子'],['N05','課程券','Ｃ幼兒'],['N06','課程券','Ｄ幼兒'],
+  ['N09','課程券','Ｅ兒童'],['N10','課程券','Ｆ兒童'],['N12','補課券','Ａ親子'],['N13','補課券','Ｂ親子'],
+  ['N14','補課券','Ｃ幼兒'],['N23','補課券','Ｄ幼兒'],['N24','補課券','Ｅ兒童'],['N25','補課券','Ｆ兒童'],
+  ['N71','課程券','Ａ親子'],['N72','課程券','Ｂ親子'],['N73','課程券','Ｃ幼兒'],['N74','課程券','Ｄ幼兒'],
+  ['N75','課程券','Ｅ兒童'],['N76','課程券','Ｆ兒童'],['N77','補課券','Ａ親子'],['N78','補課券','Ｂ親子'],
+  ['N79','補課券','Ｃ幼兒'],['N80','補課券','Ｄ幼兒'],['N81','補課券','Ｅ兒童'],['N82','補課券','Ｆ兒童'],
+  ['N48','體驗券','A親子'],['N55','體驗券','C幼兒'],['N56','體驗券','E兒童']
+];
+
+function courseOf(label){ for(const c of COURSES) if(String(label).includes(c)) return c; return null; }
+function pad(n){ return String(n).padStart(2,'0'); }
+function weekKey(y,m,d){
+  const dt = new Date(Date.UTC(y,m-1,d));
+  const dow = (dt.getUTCDay()+6)%7; // Mon=0
+  const mon = new Date(dt.getTime()-dow*864e5), sun = new Date(mon.getTime()+6*864e5);
+  const f = x => `${x.getUTCFullYear()}/${pad(x.getUTCMonth()+1)}/${pad(x.getUTCDate())}`;
+  return { key:f(mon), label:`${f(mon)} ~ ${f(sun).slice(5)}` };
+}
+const TITLE_RE = /^(\d{4})\/(\d{1,2})\/(\d{1,2})\s+\d{1,2}:\d{2}\s*~\s*\d{1,2}:\d{2}__/;
+function branchFrom(s){ const m = String(s).match(/(西屯|北屯)館/); return m ? m[1] : null; }
+
+// rows: array of arrays (one sheet). Returns {branch, records:[{id,branch,week,weekLabel,code,qty,status}], warnings}
+function parseSheet(rows, fileName){
+  const warnings = [];
+  let fileBranch = null;
+  for(let i=0;i<Math.min(rows.length,3);i++){ const b = branchFrom(rows[i] && rows[i][0]); if(b){ fileBranch=b; break; } }
+  if(!fileBranch) fileBranch = branchFrom(fileName);
+  const records = [];
+  let session = null, header = null, codeCols = [], statusCol = -1, idCol = -1;
+  for(const r of rows){
+    const c0 = r && r[0] != null ? String(r[0]).trim() : '';
+    if(!c0){ continue; }
+    const tm = c0.match(TITLE_RE);
+    if(tm){
+      const wk = weekKey(+tm[1], +tm[2], +tm[3]);
+      session = { week:wk.key, weekLabel:wk.label, branch: branchFrom(c0) || fileBranch, title:c0 };
+      header = null; continue;
+    }
+    if(c0 === '預約時間'){
+      header = r; codeCols = []; statusCol = -1; idCol = -1;
+      r.forEach((h,j)=>{
+        h = String(h||'');
+        const m = h.match(/^約課費用-(N\d{2})-/);
+        if(m) codeCols.push([j,m[1]]);
+        if(h === '到課狀態') statusCol = j;
+        if(h === '預約編號') idCol = j;
+      });
+      continue;
+    }
+    if(!header || !session) continue;
+    const id = idCol>=0 ? String(r[idCol]||'').trim() : '';
+    const status = statusCol>=0 ? String(r[statusCol]||'').trim() : '';
+    for(const [j,code] of codeCols){
+      const v = parseFloat(r[j]);
+      if(v && v>0) records.push({ id, branch:session.branch, week:session.week, weekLabel:session.weekLabel, code, qty:v, status });
+    }
+  }
+  if(!fileBranch && !records.some(x=>x.branch)) warnings.push('無法判斷館別');
+  if(!records.length) warnings.push('找不到預約資料，請確認是「團體課表預約明細簽到版」');
+  return { branch:fileBranch, records, warnings };
+}
+
+// Aggregate. cfg = {num:Set, den:Set, map:{code:{type,course}}}, opts={scope:'all'|'attended', branch:'all'|...}
+function aggregate(records, cfg, opts){
+  const seen = new Set();
+  const weeks = {};      // week -> branch -> course -> {num,den}
+  const tickets = {};    // branch|code -> qty
+  for(const r of records){
+    const k = r.id ? r.id+'|'+r.code : null;
+    if(k){ if(seen.has(k)) continue; seen.add(k); }
+    if(opts.scope==='attended' && r.status!=='到課') continue;
+    if(opts.branch!=='all' && r.branch!==opts.branch) continue;
+    const isNum = cfg.num.has(r.code), isDen = cfg.den.has(r.code);
+    if(!isNum && !isDen) continue;
+    const m = cfg.map[r.code]; const course = m ? m.course : null;
+    if(!course || !r.branch) continue;
+    const w = (weeks[r.week] ||= { label:r.weekLabel, branches:{} });
+    const b = (w.branches[r.branch] ||= {});
+    const c = (b[course] ||= {num:0,den:0});
+    if(isNum) c.num += r.qty; else c.den += r.qty;
+    const tk = r.branch+'|'+r.code; tickets[tk] = (tickets[tk]||0) + r.qty;
+  }
+  return { weeks, tickets };
+}
+function rate(num,den){ return den>0 ? num/den : null; }
+// ===== CORE END =====
+
+// ---------- UI ----------
+const state = { files:[], records:[], scope:'all', branch:'all' };
+const LS_KEY = 'lalaso-referral-cfg-v1';
+let cfg;
+
+function buildCfg(numArr, denArr, mapRows){
+  const map = {};
+  for(const [code,type,label] of mapRows){ const c = courseOf(label); if(code && c) map[code.trim().toUpperCase()] = {type:type||'', course:c, label}; }
+  return { num:new Set(numArr), den:new Set(denArr), map, numArr, denArr, mapRows };
+}
+function loadCfg(){
+  try{
+    const s = JSON.parse(localStorage.getItem(LS_KEY)||'null');
+    if(s && s.num && s.den && s.map) return buildCfg(s.num, s.den, s.map);
+  }catch(e){}
+  return buildCfg(DEFAULT_NUM, DEFAULT_DEN, DEFAULT_MAP);
+}
+function saveCfg(c){ try{ localStorage.setItem(LS_KEY, JSON.stringify({num:c.numArr,den:c.denArr,map:c.mapRows})); }catch(e){} }
+function fillCfgForm(){
+  numCodes.value = cfg.numArr.join(', ');
+  denCodes.value = cfg.denArr.join(', ');
+  mapText.value = cfg.mapRows.map(r=>r.join(',')).join('\n');
+}
+const parseCodes = s => s.split(/[\s,，、]+/).map(x=>x.trim().toUpperCase()).filter(Boolean);
+
+const $ = id => document.getElementById(id);
+const numCodes=$('numCodes'), denCodes=$('denCodes'), mapText=$('mapText');
+
+function pct(v){ return v==null ? '—' : (v*100).toFixed(1)+'%'; }
+function fmt(n){ return Number.isInteger(n) ? String(n) : n.toFixed(1); }
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function sumCourses(obj){ // obj course->{num,den}
+  const t={num:0,den:0}; for(const c of COURSES){ if(obj[c]){ t.num+=obj[c].num; t.den+=obj[c].den; } } return t;
+}
+
+function render(){
+  const out = $('out');
+  if(!state.records.length){ out.classList.add('hidden'); return; }
+  const { weeks, tickets } = aggregate(state.records, cfg, {scope:state.scope, branch:state.branch});
+  const wkeys = Object.keys(weeks).sort();
+  if(!wkeys.length){ out.classList.add('hidden'); return; }
+  out.classList.remove('hidden');
+  const branches = ['西屯','北屯'].filter(b => wkeys.some(w => weeks[w].branches[b]));
+
+  // overall per branch
+  const overall = {}; // branch -> course -> {num,den}
+  for(const w of wkeys) for(const b of branches){
+    const src = weeks[w].branches[b]; if(!src) continue;
+    const dst = (overall[b] ||= {});
+    for(const c of COURSES){ if(src[c]){ const d=(dst[c] ||= {num:0,den:0}); d.num+=src[c].num; d.den+=src[c].den; } }
+  }
+  $('kpiTitle').textContent = wkeys.length>1
+    ? `整體期間（${weeks[wkeys[0]].label.slice(0,10)} ~ ${weeks[wkeys[wkeys.length-1]].label.slice(-5)}，共 ${wkeys.length} 週）`
+    : `整體期間（${weeks[wkeys[0]].label}）`;
+  const maxRate = Math.max(0.0001, ...branches.flatMap(b => COURSES.map(c => rate(overall[b]?.[c]?.num||0, overall[b]?.[c]?.den||0)||0)));
+  const kpiCards = branches.map(b=>{
+    const t = sumCourses(overall[b]||{});
+    const bars = COURSES.map(c=>{
+      const x = overall[b]?.[c] || {num:0,den:0}; const r = rate(x.num,x.den);
+      return `<div class="bar"><span>${c}</span><div class="track"><div class="fill c-${c}" style="width:${r?Math.max(2,r/maxRate*100):0}%"></div></div><span style="text-align:right"><b>${pct(r)}</b></span></div>
+              <div class="muted" style="margin:-4px 0 2px 52px">體驗 ${fmt(x.num)} ／ 正課＋補課 ${fmt(x.den)}</div>`;
+    }).join('');
+    return `<div class="kpi"><h3><span>${b}館</span><span class="big">${pct(rate(t.num,t.den))}</span></h3><div class="bars">${bars}</div></div>`;
+  });
+  if(branches.length>1){
+    const all = {}; for(const b of branches) for(const c of COURSES){ const x=overall[b]?.[c]; if(x){ const d=(all[c] ||= {num:0,den:0}); d.num+=x.num; d.den+=x.den; } }
+    const t = sumCourses(all);
+    const bars = COURSES.map(c=>{ const x=all[c]||{num:0,den:0}; const r=rate(x.num,x.den);
+      return `<div class="bar"><span>${c}</span><div class="track"><div class="fill c-${c}" style="width:${r?Math.max(2,r/maxRate*100):0}%"></div></div><span style="text-align:right"><b>${pct(r)}</b></span></div>
+              <div class="muted" style="margin:-4px 0 2px 52px">體驗 ${fmt(x.num)} ／ 正課＋補課 ${fmt(x.den)}</div>`; }).join('');
+    kpiCards.push(`<div class="kpi" style="border-color:var(--blue2)"><h3><span>兩館合計</span><span class="big">${pct(rate(t.num,t.den))}</span></h3><div class="bars">${bars}</div></div>`);
+  }
+  $('kpis').innerHTML = kpiCards.join('');
+
+  // weekly table
+  const groups = [...COURSES,'合計'];
+  let h = `<thead><tr><th rowspan="2">週別</th><th rowspan="2">館別</th>${groups.map(g=>`<th colspan="3" class="g-${g}" style="text-align:center">${g}</th>`).join('')}</tr>
+    <tr>${groups.map(g=>`<th class="g-${g}">體驗</th><th class="g-${g}">正課＋補課</th><th class="g-${g}">轉介率</th>`).join('')}</tr></thead><tbody>`;
+  const csv = [['週別','館別',...groups.flatMap(g=>[`${g}_體驗`,`${g}_正課補課`,`${g}_轉介率`])]];
+  const rowHtml = (wl, bl, obj, cls='') => {
+    const cells = [], cr = [wl, bl];
+    for(const g of groups){
+      const x = g==='合計' ? sumCourses(obj) : (obj[g]||{num:0,den:0});
+      const r = rate(x.num,x.den);
+      cells.push(`<td>${fmt(x.num)}</td><td>${fmt(x.den)}</td><td class="rate">${pct(r)}</td>`);
+      cr.push(x.num, x.den, r==null?'':(r*100).toFixed(1)+'%');
+    }
+    csv.push(cr);
+    return `<tr class="${cls}"><td>${esc(wl)}</td><td>${esc(bl)}</td>${cells.join('')}</tr>`;
+  };
+  for(const w of wkeys){
+    for(const b of branches) if(weeks[w].branches[b]) h += rowHtml(weeks[w].label, b, weeks[w].branches[b]);
+  }
+  if(wkeys.length>1){
+    for(const b of branches) h += rowHtml('整體期間', b, overall[b]||{}, 'total');
+  }
+  h += '</tbody>';
+  $('tbl').innerHTML = h;
+  state.csv = csv;
+
+  // ticket detail
+  const codes = [...cfg.numArr, ...cfg.denArr];
+  let t = `<thead><tr><th>票券</th><th>券別／課程</th>${branches.map(b=>`<th>${b}</th>`).join('')}</tr></thead><tbody>`;
+  for(const code of codes){
+    const vals = branches.map(b => tickets[b+'|'+code]||0);
+    if(!vals.some(v=>v)) continue;
+    const m = cfg.map[code];
+    t += `<tr><td>${code}</td><td>${m?esc(m.type+'｜'+m.label):'<span style="color:#a33">未設定課程</span>'}</td>${vals.map(v=>`<td>${fmt(v)}</td>`).join('')}</tr>`;
+  }
+  $('tickets').innerHTML = t + '</tbody>';
+}
+
+function renderFiles(){
+  $('files').innerHTML = state.files.map(f =>
+    `<span class="chip ${f.warnings.length?'err':''}">${esc(f.branch?f.branch+'館':'?')}｜${esc(f.name)}（${f.count} 筆）${f.warnings.length?'⚠ '+esc(f.warnings.join('；')):''}</span>`).join('');
+  const unmapped = new Set();
+  for(const r of state.records) if((cfg.num.has(r.code)||cfg.den.has(r.code)) && !cfg.map[r.code]) unmapped.add(r.code);
+  $('warns').innerHTML = unmapped.size ? `<div class="warn">以下票券在設定中沒有對應課程，未列入計算：${[...unmapped].join('、')}</div>` : '';
+}
+
+async function handleFiles(list){
+  for(const file of list){
+    try{
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, {type:'array'});
+      let recs = [], branch = null, warnings = [];
+      for(const sn of wb.SheetNames){
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], {header:1, defval:'', raw:true});
+        const p = parseSheet(rows, file.name);
+        recs = recs.concat(p.records); branch = branch || p.branch;
+        if(p.records.length) warnings = []; else if(!recs.length) warnings = p.warnings;
+      }
+      state.files = state.files.filter(f => f.name !== file.name);
+      state.records = state.records.filter(r => r.file !== file.name);
+      recs.forEach(r => r.file = file.name);
+      state.files.push({ name:file.name, branch, count:new Set(recs.map(r=>r.id)).size, warnings });
+      state.records.push(...recs);
+    }catch(e){
+      state.files.push({ name:file.name, branch:null, count:0, warnings:['讀取失敗：'+e.message] });
+    }
+  }
+  renderFiles(); render();
+}
+
+// events
+const drop = $('drop'), fileInput = $('file');
+drop.addEventListener('click', ()=>fileInput.click());
+fileInput.addEventListener('change', e=>{ handleFiles([...e.target.files]); fileInput.value=''; });
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev, e=>{ e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev, e=>{ e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e=>handleFiles([...e.dataTransfer.files]));
+
+function seg(id, key){
+  $(id).addEventListener('click', e=>{
+    const b = e.target.closest('button'); if(!b) return;
+    [...$(id).children].forEach(x=>x.classList.toggle('on', x===b));
+    state[key] = b.dataset.v; render();
+  });
+}
+seg('branchSeg','branch');
+
+$('clear').addEventListener('click', ()=>{ state.files=[]; state.records=[]; renderFiles(); render(); });
+$('csv').addEventListener('click', ()=>{
+  if(!state.csv || !state.records.length) return;
+  const body = state.csv.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  const blob = new Blob(['﻿'+body], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `轉介率.csv`; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+});
+$('saveCfg').addEventListener('click', ()=>{
+  const rows = mapText.value.split(/\n/).map(l=>l.split(/[,，\t]/).map(s=>s.trim())).filter(r=>r[0]);
+  cfg = buildCfg(parseCodes(numCodes.value), parseCodes(denCodes.value), rows);
+  saveCfg(cfg); $('cfgMsg').textContent = '已套用'; setTimeout(()=>$('cfgMsg').textContent='',2000);
+  renderFiles(); render();
+});
+$('resetCfg').addEventListener('click', ()=>{
+  cfg = buildCfg(DEFAULT_NUM, DEFAULT_DEN, DEFAULT_MAP);
+  try{ localStorage.removeItem(LS_KEY); }catch(e){}
+  fillCfgForm(); renderFiles(); render();
+});
+
+cfg = loadCfg(); fillCfgForm();
+</script>
+</body>
+</html>
