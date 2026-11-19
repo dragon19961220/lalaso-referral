@@ -176,7 +176,7 @@ const CATALOG = [
   ['N88','回饋券','Ａ親子游泳'],['N89','回饋券','Ｂ親子游泳'],['N90','回饋券','Ｃ幼兒游泳'],
   ['N91','回饋券','Ｄ幼兒游泳'],['N92','回饋券','Ｅ兒童游泳'],['N93','回饋券','Ｆ兒童游泳']
 ];
-function courseOf(name){ for(const c of COURSES) if(String(name).includes(c)) return c; return ''; }
+function courseOf(name){ if(String(name).includes('新生寶寶')) return '親子'; for(const c of COURSES) if(String(name).includes(c)) return c; return ''; }
 const EXCLUDE_RE = /自游|水上樂園|樂園券|自游券/;
 // 預設：分子 = 體驗券＋單次券（不含水上樂園、自游時光），且有對應課程者；分母 = 課程券＋補課券
 function defaultTicketCfg(code, type, name){
@@ -284,7 +284,7 @@ function rate(num,den){ return den>0 ? num/den : null; }
 
 // ---------- UI ----------
 const $ = id => document.getElementById(id);
-const LS_KEY = 'lalaso-referral-cfg-v2';
+const LS_KEY = 'lalaso-referral-cfg-v3', LS_OLD = 'lalaso-referral-cfg-v2';
 const state = { files:[], records:[], fileTickets:{}, branch:'all', unit:'all' };
 let cfg;
 
@@ -303,6 +303,10 @@ function loadCfg(){
   try{
     const s = JSON.parse(localStorage.getItem(LS_KEY)||'null');
     if(s){ Object.assign(base.tickets, s.tickets||{}); base.denMode = s.denMode||'manual'; base.students = s.students || base.students; }
+    else { // 舊版設定：只沿用正式生人數，票券改用新預設
+      const o = JSON.parse(localStorage.getItem(LS_OLD)||'null');
+      if(o && o.students) base.students = o.students;
+    }
   }catch(e){}
   return base;
 }
