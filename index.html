@@ -109,13 +109,6 @@
           <button data-v="北屯">北屯</button>
         </span>
       </div>
-      <div><span class="muted">統計單位　</span>
-        <span class="seg" id="unitSeg">
-          <button data-v="all" class="on">整段期間</button>
-          <button data-v="month">每月</button>
-          <button data-v="week">每週</button>
-        </span>
-      </div>
       <div style="flex:1"></div>
       <button class="btn" id="csv">匯出 CSV</button>
       <button class="btn" id="clear">清除資料</button>
@@ -125,11 +118,8 @@
 
   <section id="out" class="hidden">
     <div class="card">
-      <h2 id="kpiTitle">整段期間</h2>
-      <div class="kpis" id="kpis"></div>
-    </div>
-    <div class="card">
-      <h2 id="tblTitle">明細</h2>
+      <h2>每週轉介率</h2>
+      <div id="stuWarn"></div>
       <div class="scroll"><table id="tbl"></table></div>
     </div>
   </section>
@@ -147,7 +137,7 @@
         <div style="flex:1"></div>
         <button class="btn sm" id="resetCfg">恢復預設</button>
       </div>
-      <p class="muted" style="margin:0 0 10px">勾「分子」或「分母」決定票券算在哪一邊；「課程」決定歸到親子／幼兒／兒童，選「不計」就不會算進任何課程。「張數」是目前上傳檔案中的預約張數。</p>
+      <p class="muted" style="margin:0 0 10px">勾「體驗券+單次券」或「分母」決定票券算在哪一邊；「課程」決定歸到親子／幼兒／兒童，選「不計」就不會算進任何課程。「張數」是目前上傳檔案中的預約張數。</p>
       <div class="scroll"><table id="tkTbl"></table></div>
     </details>
   </section>
@@ -178,7 +168,7 @@ const CATALOG = [
 ];
 function courseOf(name){ if(String(name).includes('新生寶寶')) return '親子'; for(const c of COURSES) if(String(name).includes(c)) return c; return ''; }
 const EXCLUDE_RE = /自游|水上樂園|樂園券|自游券/;
-// 預設：分子 = 體驗券＋單次券（不含水上樂園、自游時光），且有對應課程者；分母 = 課程券＋補課券
+// 預設：體驗券+單次券（分子）= 體驗券＋單次券（不含水上樂園、自游時光），且有對應課程者；分母 = 課程券＋補課券
 function defaultTicketCfg(code, type, name){
   const course = courseOf(name);
   const num = (type==='體驗券' || type==='單次券') && !EXCLUDE_RE.test(name) && !!course;
@@ -285,7 +275,7 @@ function rate(num,den){ return den>0 ? num/den : null; }
 // ---------- UI ----------
 const $ = id => document.getElementById(id);
 const LS_KEY = 'lalaso-referral-cfg-v3', LS_OLD = 'lalaso-referral-cfg-v2';
-const state = { files:[], records:[], fileTickets:{}, branch:'all', unit:'all' };
+const state = { files:[], records:[], fileTickets:{}, branch:'all', unit:'week' };
 let cfg;
 
 function catalogMap(){
@@ -356,7 +346,7 @@ function renderTickets(counts){
     return (oa<0?9:oa)-(ob<0?9:ob) || a.localeCompare(b);
   });
   const manual = cfg.denMode==='manual';
-  let h = `<thead><tr><th class="c">分子</th><th class="c">分母</th><th>代碼</th><th>券別</th><th>名稱</th><th>課程</th><th style="text-align:right">張數</th></tr></thead><tbody>`;
+  let h = `<thead><tr><th class="c">體驗券+單次券</th><th class="c">分母</th><th>代碼</th><th>券別</th><th>名稱</th><th>課程</th><th style="text-align:right">張數</th></tr></thead><tbody>`;
   for(const c of codes){
     const t = cfg.tickets[c], k = cat[c];
     h += `<tr class="${t.num?'on-num':''} ${!t.num && !(t.den&&!manual)?'dim':''}">
@@ -379,7 +369,7 @@ function render(){
   const manual = cfg.denMode==='manual';
   [...$('denSeg').children].forEach(x=>x.classList.toggle('on', x.dataset.v===cfg.denMode));
   const numCodes = Object.entries(cfg.tickets).filter(([,t])=>t.num && t.course).map(([c])=>c).sort();
-  $('formula').textContent = `轉介率 = 分子票券張數 ÷ ${manual?'正式生人數':'分母票券張數'}。分子：${numCodes.join('、')||'（未勾選）'}。每筆預約計 1 張，不論是否到課。`;
+  $('formula').textContent = `轉介率 = 體驗券+單次券張數 ÷ ${manual?'正式生人數':'分母票券張數'}。體驗券+單次券：${numCodes.join('、')||'（未勾選）'}。每筆預約計 1 張，不論是否到課；週別以上課日期計算（週一至週日）。`;
 
   const { periods, counts } = aggregate(state.records, cfg, {branch:state.branch, unit:state.unit});
   renderTickets(counts);
@@ -389,31 +379,15 @@ function render(){
   out.classList.remove('hidden');
   const branches = BRANCHES.filter(b => state.branch==='all' || b===state.branch);
 
-  // 整段期間（分子加總；分母手動時不累加）
-  const all = aggregate(state.records, cfg, {branch:state.branch, unit:'all'}).periods.all || {b:{}};
-  const dates = state.records.filter(r=>state.branch==='all'||r.branch===state.branch).map(r=>r.date.map(pad).join('/')).sort();
-  $('kpiTitle').textContent = `整段期間（${dates[0]} ~ ${dates[dates.length-1]}）`;
-  const card = (title, obj, hl) => {
-    const t = sumC(obj);
-    const bars = COURSES.map(c=>{
-      const x = obj?.[c] || {num:0,den:0}; const r = rate(x.num,x.den);
-      return `<div class="bar"><span>${c}</span><div class="track"><div class="fill c-${c}" style="width:${r?Math.min(100,Math.max(2,r*100)):0}%"></div></div><span style="text-align:right"><b>${pct(r)}</b></span></div>
-              <div class="muted" style="margin:-4px 0 2px 52px">分子 ${fmt(x.num)} ／ ${denLabel()} ${fmt(x.den)}</div>`;
-    }).join('');
-    return `<div class="kpi" ${hl?'style="border-color:var(--blue2)"':''}><h3><span>${title}</span><span class="big">${pct(rate(t.num,t.den))}</span></h3><div class="bars">${bars}</div></div>`;
-  };
   const merge = objs => { const o={}; for(const x of objs) for(const c of COURSES) if(x?.[c]){ const d=(o[c] ||= {num:0,den:0}); d.num+=x[c].num; d.den+=x[c].den; } return o; };
-  const cards = branches.map(b => card(`${b}館`, all.b[b]));
-  if(branches.length>1) cards.push(card('兩館合計', merge(branches.map(b=>all.b[b])), true));
-  $('kpis').innerHTML = cards.join('');
-  if(manual && !BRANCHES.some(b=>COURSES.some(c=>+cfg.students?.[b]?.[c]))) $('kpis').insertAdjacentHTML('beforeend','<div class="warn" style="grid-column:1/-1">還沒輸入正式生人數，請先在 ② 填入，才算得出轉介率。</div>');
+  const noStu = manual && !BRANCHES.some(b=>COURSES.some(c=>+cfg.students?.[b]?.[c]));
+  $('stuWarn').innerHTML = noStu ? '<div class="warn" style="margin:0 0 10px">還沒輸入正式生人數，請先在 ② 填入，才算得出轉介率。</div>' : '';
 
   // 明細表
-  $('tblTitle').textContent = state.unit==='week' ? '每週明細' : state.unit==='month' ? '每月明細' : '明細';
   const groups = [...COURSES,'合計'];
-  let h = `<thead><tr><th rowspan="2">期間</th><th rowspan="2">館別</th>${groups.map(g=>`<th colspan="3" class="g-${g}" style="text-align:center">${g}</th>`).join('')}</tr>
-    <tr>${groups.map(g=>`<th class="g-${g}">分子</th><th class="g-${g}">${denLabel()}</th><th class="g-${g}">轉介率</th>`).join('')}</tr></thead><tbody>`;
-  const csv = [['期間','館別',...groups.flatMap(g=>[`${g}_分子`,`${g}_${denLabel()}`,`${g}_轉介率`])]];
+  let h = `<thead><tr><th rowspan="2">週別</th><th rowspan="2">館別</th>${groups.map(g=>`<th colspan="3" class="g-${g}" style="text-align:center">${g}</th>`).join('')}</tr>
+    <tr>${groups.map(g=>`<th class="g-${g}">體驗券+單次券</th><th class="g-${g}">${denLabel()}</th><th class="g-${g}">轉介率</th>`).join('')}</tr></thead><tbody>`;
+  const csv = [["週別","館別",...groups.flatMap(g=>[`${g}_體驗券+單次券`,`${g}_${denLabel()}`,`${g}_轉介率`])]];
   const rowHtml = (pl, bl, obj, cls='') => {
     const cells = [], cr = [pl, bl];
     for(const g of groups){
@@ -439,7 +413,7 @@ function renderFiles(){
     `<span class="chip ${f.warnings.length?'err':''}">${esc(f.kind||'?')}｜${esc(f.name)}${f.warnings.length?'　⚠ '+esc(f.warnings.join('；')):''}</span>`).join('');
   const nocourse = new Set();
   for(const r of state.records){ const t = cfg.tickets[r.code]; if(t && t.num && !t.course) nocourse.add(r.code); }
-  $('warns').innerHTML = nocourse.size ? `<div class="warn">以下分子票券沒有設定課程，未列入計算：${[...nocourse].join('、')}（可在「計算設定」選擇課程）</div>` : '';
+  $('warns').innerHTML = nocourse.size ? `<div class="warn">以下「體驗券+單次券」票券沒有設定課程，未列入計算：${[...nocourse].join('、')}（可在「計算設定」選擇課程）</div>` : '';
 }
 
 async function handleFiles(list){
@@ -481,7 +455,6 @@ function seg(id, fn){
   });
 }
 seg('branchSeg', v=>{ state.branch=v; render(); });
-seg('unitSeg', v=>{ state.unit=v; render(); });
 seg('denSeg', v=>{ cfg.denMode=v; saveCfg(); renderStudents(); render(); });
 $('clear').addEventListener('click', ()=>{ state.files=[]; state.records=[]; renderFiles(); render(); });
 $('csv').addEventListener('click', ()=>{
